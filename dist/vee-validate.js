@@ -810,6 +810,18 @@ var max$1 = (function (value, _ref) {
     return String(value).length <= length;
 });
 
+var max_value$1 = (function (value, _ref) {
+    var _ref2 = slicedToArray(_ref, 1);
+
+    var max = _ref2[0];
+
+    if (Array.isArray(value) || value === null || value === undefined || value === '') {
+        return false;
+    }
+
+    return Number(value) <= max;
+});
+
 var mimes$1 = (function (files, mimes) {
     var regex = new RegExp(mimes.join('|').replace('*', '.+') + '$', 'i');
     for (var i = 0; i < files.length; i++) {
@@ -830,6 +842,18 @@ var min$1 = (function (value, _ref) {
         return false;
     }
     return String(value).length >= length;
+});
+
+var min_value$1 = (function (value, _ref) {
+    var _ref2 = slicedToArray(_ref, 1);
+
+    var min = _ref2[0];
+
+    if (Array.isArray(value) || value === null || value === undefined || value === '') {
+        return false;
+    }
+
+    return Number(value) >= min;
 });
 
 var not_in$1 = (function (value, options) {
@@ -1084,8 +1108,10 @@ var Rules = {
     in: In,
     ip: ip$1,
     max: max$1,
+    max_value: max_value$1,
     mimes: mimes$1,
     min: min$1,
+    min_value: min_value$1,
     not_in: not_in$1,
     numeric: numeric$1,
     regex: regex$1,
@@ -1112,10 +1138,11 @@ var ErrorBag = function () {
 
     createClass(ErrorBag, [{
         key: "add",
-        value: function add(field, msg, scope) {
+        value: function add(field, msg, scope, rule) {
             var error = {
                 field: field,
-                msg: msg
+                msg: msg,
+                rule: rule
             };
 
             if (scope) {
@@ -1572,14 +1599,26 @@ var messages = {
         var length = _ref12[0];
         return 'The ' + field + ' may not be greater than ' + length + ' characters.';
     },
+    max_value: function max_value(field, _ref13) {
+        var _ref14 = slicedToArray(_ref13, 1);
+
+        var max = _ref14[0];
+        return 'The ' + field + ' must be ' + max + ' or less.';
+    },
     mimes: function mimes(field) {
         return 'The ' + field + ' must have a valid file type.';
     },
-    min: function min(field, _ref13) {
-        var _ref14 = slicedToArray(_ref13, 1);
+    min: function min(field, _ref15) {
+        var _ref16 = slicedToArray(_ref15, 1);
 
-        var length = _ref14[0];
+        var length = _ref16[0];
         return 'The ' + field + ' must be at least ' + length + ' characters.';
+    },
+    min_value: function min_value(field, _ref17) {
+        var _ref18 = slicedToArray(_ref17, 1);
+
+        var min = _ref18[0];
+        return 'The ' + field + ' must be ' + min + ' or more.';
     },
     not_in: function not_in(field) {
         return 'The ' + field + ' must be a valid value.';
@@ -1593,10 +1632,10 @@ var messages = {
     required: function required(field) {
         return 'The ' + field + ' is required.';
     },
-    size: function size(field, _ref15) {
-        var _ref16 = slicedToArray(_ref15, 1);
+    size: function size(field, _ref19) {
+        var _ref20 = slicedToArray(_ref19, 1);
 
-        var _size = _ref16[0];
+        var _size = _ref20[0];
         return 'The ' + field + ' must be less than ' + _size + ' KB.';
     },
     url: function url(field) {
@@ -2328,12 +2367,12 @@ var Validator = function () {
                             return t.valid;
                         });
                         if (!allValid) {
-                            _this5.errorBag.add(name, _this5._formatErrorMessage(name, rule), scope);
+                            _this5.errorBag.add(name, _this5._formatErrorMessage(name, rule), scope, rule);
                         }
                     } else {
                         // Is a single object.
                         allValid = values.valid;
-                        _this5.errorBag.add(name, _this5._formatErrorMessage(name, rule, values.data), scope);
+                        _this5.errorBag.add(name, rule, _this5._formatErrorMessage(name, rule, values.data), scope);
                     }
 
                     return allValid;
@@ -2342,14 +2381,14 @@ var Validator = function () {
 
             if (isObject(result)) {
                 if (!result.valid) {
-                    this.errorBag.add(name, this._formatErrorMessage(name, rule, result.data), scope);
+                    this.errorBag.add(name, this._formatErrorMessage(name, rule, result.data), scope, rule);
                 }
 
                 return result.valid;
             }
 
             if (!result) {
-                this.errorBag.add(name, this._formatErrorMessage(name, rule), scope);
+                this.errorBag.add(name, this._formatErrorMessage(name, rule), scope, rule);
             }
 
             return result;
@@ -2753,31 +2792,47 @@ var ListenerGenerator = function () {
     }, {
         key: '_getSuitableListener',
         value: function _getSuitableListener() {
-            if (this.el.type === 'file') {
-                return {
-                    name: 'change',
-                    listener: this._fileListener
-                };
+            var listener = void 0;
+
+            // determine the suitable listener and events to handle
+            switch (this.el.type) {
+                case 'file':
+                    listener = {
+                        names: ['change'],
+                        listener: this._fileListener
+                    };
+                    break;
+
+                case 'radio':
+                    listener = {
+                        names: ['change'],
+                        listener: this._radioListener
+                    };
+                    break;
+
+                case 'checkbox':
+                    listener = {
+                        names: ['change'],
+                        listener: this._checkboxListener
+                    };
+                    break;
+
+                default:
+                    listener = {
+                        names: ['input', 'blur'],
+                        listener: this._inputListener
+                    };
+                    break;
             }
 
-            if (this.el.type === 'radio') {
-                return {
-                    name: 'change',
-                    listener: this._radioListener
-                };
-            }
+            // users are able to skip validation on certain events
+            // pipe separated list of handler names to skip
+            var skipValidateOn = this.el.dataset.skip ? this.el.dataset.skip.split('|') : [];
+            listener.names = listener.names.filter(function (listenerName) {
+                return skipValidateOn.indexOf(listenerName) === -1;
+            });
 
-            if (this.el.type === 'checkbox') {
-                return {
-                    name: 'change',
-                    listener: this._checkboxListener
-                };
-            }
-
-            return {
-                name: 'input',
-                listener: this._inputListener
-            };
+            return listener;
         }
 
         /**
@@ -2795,16 +2850,20 @@ var ListenerGenerator = function () {
             if (~['radio', 'checkbox'].indexOf(this.el.type)) {
                 this.vm.$once('validatorReady', function () {
                     [].concat(toConsumableArray(document.querySelectorAll('input[name="' + _this4.el.name + '"]'))).forEach(function (input) {
-                        input.addEventListener(handler.name, listener);
-                        _this4.callbacks.push({ name: handler.name, listener: listener, el: input });
+                        handler.names.forEach(function (handlerName) {
+                            input.addEventListener(handlerName, listener);
+                            _this4.callbacks.push({ name: handlerName, listener: listener, el: input });
+                        });
                     });
                 });
 
                 return;
             }
 
-            this.el.addEventListener(handler.name, listener);
-            this.callbacks.push({ name: handler.name, listener: listener, el: this.el });
+            handler.names.forEach(function (handlerName) {
+                _this4.el.addEventListener(handlerName, listener);
+                _this4.callbacks.push({ name: handlerName, listener: listener, el: _this4.el });
+            });
         }
 
         /**

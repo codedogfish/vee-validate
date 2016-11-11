@@ -418,6 +418,14 @@ var max = (value, [length]) => {
     return String(value).length <= length;
 };
 
+var max_value = (value, [max]) => {
+    if (Array.isArray(value) || value === null || value === undefined || value === '') {
+        return false;
+    }
+
+    return Number(value) <= max;
+};
+
 var mimes = (files, mimes) => {
     const regex = new RegExp(`${mimes.join('|').replace('*', '.+')}$`, 'i');
     for (let i = 0; i < files.length; i++) {
@@ -434,6 +442,14 @@ var min = (value, [length]) => {
         return false;
     }
     return String(value).length >= length;
+};
+
+var min_value = (value, [min]) => {
+    if (Array.isArray(value) || value === null || value === undefined || value === '') {
+        return false;
+    }
+
+    return Number(value) >= min;
 };
 
 var not_in = (value, options) => ! options.filter(option => option == value).length; // eslint-disable-line
@@ -666,8 +682,10 @@ var Rules = {
     in: In,
     ip,
     max,
+    max_value,
     mimes,
     min,
+    min_value,
     not_in,
     numeric,
     regex,
@@ -689,10 +707,11 @@ class ErrorBag
      * @param {string} msg The error message.
      * @param {String} scope The Scope name, optional.
      */
-    add(field, msg, scope) {
+    add(field, msg, scope, rule) {
         const error = {
             field,
-            msg
+            msg,
+            rule
         };
 
         if (scope) {
@@ -1015,8 +1034,10 @@ var messages = {
     in: (field) => `The ${field} must be a valid value.`,
     ip: (field) => `The ${field} must be a valid ip address.`,
     max: (field, [length]) => `The ${field} may not be greater than ${length} characters.`,
+    max_value: (field, [max]) => `The ${field} must be ${max} or less.`,
     mimes: (field) => `The ${field} must have a valid file type.`,
     min: (field, [length]) => `The ${field} must be at least ${length} characters.`,
+    min_value: (field, [min]) => `The ${field} must be ${min} or more.`,
     not_in: (field) => `The ${field} must be a valid value.`,
     numeric: (field) => `The ${field} may only contain numeric characters.`,
     regex: (field) => `The ${field} format is invalid.`,
@@ -1698,12 +1719,13 @@ class Validator
                 if (Array.isArray(values)) {
                     allValid = values.every(t => t.valid);
                     if (! allValid) {
-                        this.errorBag.add(name, this._formatErrorMessage(name, rule), scope);
+                        this.errorBag.add(name, this._formatErrorMessage(name, rule), scope, rule);
                     }
                 } else { // Is a single object.
                     allValid = values.valid;
                     this.errorBag.add(
                         name,
+                        rule,
                         this._formatErrorMessage(name, rule, values.data),
                         scope
                     );
@@ -1715,14 +1737,14 @@ class Validator
 
         if (isObject(result)) {
             if (! result.valid) {
-                this.errorBag.add(name, this._formatErrorMessage(name, rule, result.data), scope);
+                this.errorBag.add(name, this._formatErrorMessage(name, rule, result.data), scope, rule);
             }
 
             return result.valid;
         }
 
         if (! result) {
-            this.errorBag.add(name, this._formatErrorMessage(name, rule), scope);
+            this.errorBag.add(name, this._formatErrorMessage(name, rule), scope, rule);
         }
 
         return result;
@@ -1931,31 +1953,45 @@ class ListenerGenerator
      * Determines a suitable listener for the element.
      */
     _getSuitableListener() {
-        if (this.el.type === 'file') {
-            return {
-                name: 'change',
-                listener: this._fileListener
-            };
+        let listener;
+
+        // determine the suitable listener and events to handle
+        switch (this.el.type) {
+            case 'file':
+                listener = {
+                    names: ['change'],
+                    listener: this._fileListener
+                };
+                break;
+
+            case 'radio':
+                listener = {
+                    names: ['change'],
+                    listener: this._radioListener
+                };
+                break;
+
+            case 'checkbox':
+                listener = {
+                    names: ['change'],
+                    listener: this._checkboxListener
+                };
+                break;
+        
+            default:
+                listener = {
+                    names: ['input', 'blur'],
+                    listener: this._inputListener
+                };
+                break;
         }
 
-        if (this.el.type === 'radio') {
-            return {
-                name: 'change',
-                listener: this._radioListener
-            };
-        }
+        // users are able to skip validation on certain events
+        // pipe separated list of handler names to skip
+        const skipValidateOn = this.el.dataset.skip ? this.el.dataset.skip.split('|') : [];
+        listener.names = listener.names.filter(listenerName => skipValidateOn.indexOf(listenerName) === -1);
 
-        if (this.el.type === 'checkbox') {
-            return {
-                name: 'change',
-                listener: this._checkboxListener
-            };
-        }
-
-        return {
-            name: 'input',
-            listener: this._inputListener
-        };
+        return listener;
     }
 
     /**
@@ -1971,16 +2007,20 @@ class ListenerGenerator
         if (~['radio', 'checkbox'].indexOf(this.el.type)) {
             this.vm.$once('validatorReady', () => {
                 [...document.querySelectorAll(`input[name="${this.el.name}"]`)].forEach(input => {
-                    input.addEventListener(handler.name, listener);
-                    this.callbacks.push({ name: handler.name, listener, el: input });
+                    handler.names.forEach(handlerName => {
+                        input.addEventListener(handlerName, listener);
+                        this.callbacks.push({ name: handlerName, listener, el: input });
+                    });
                 });
             });
 
             return;
         }
 
-        this.el.addEventListener(handler.name, listener);
-        this.callbacks.push({ name: handler.name, listener, el: this.el });
+        handler.names.forEach(handlerName => {
+            this.el.addEventListener(handlerName, listener);
+            this.callbacks.push({ name: handlerName, listener, el: this.el });
+        });
     }
 
     /**

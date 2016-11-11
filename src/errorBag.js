@@ -11,10 +11,11 @@ export default class ErrorBag
      * @param {string} msg The error message.
      * @param {String} scope The Scope name, optional.
      */
-    add(field, msg, scope) {
+    add(field, msg, scope, rule) {
         const error = {
             field,
-            msg
+            msg,
+            rule
         };
 
         if (scope) {
