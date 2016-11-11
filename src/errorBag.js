@@ -146,6 +146,22 @@ export default class ErrorBag
         return false;
     }
 
+    hasError(field, ruleName, scope) {
+        for (let i = 0; i < this.errors.length; i++) {
+            if (this.errors[i].field === field && this.errors[i].rule.name === ruleName) {
+                if (scope) {
+                    if (this.errors[i].scope === scope) {
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Removes all error messages assoicated with a specific field.
      *
