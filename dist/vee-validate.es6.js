@@ -215,10 +215,11 @@ class ErrorBag
      * @param {string} msg The error message.
      * @param {String} scope The Scope name, optional.
      */
-    add(field, msg, scope) {
+    add(field, msg, scope, rule) {
         const error = {
             field,
-            msg
+            msg,
+            rule
         };
 
         if (scope) {
@@ -1224,12 +1225,13 @@ class Validator
                 if (Array.isArray(values)) {
                     allValid = values.every(t => t.valid);
                     if (! allValid) {
-                        this.errorBag.add(name, this._formatErrorMessage(name, rule), scope);
+                        this.errorBag.add(name, this._formatErrorMessage(name, rule), scope, rule);
                     }
                 } else { // Is a single object.
                     allValid = values.valid;
                     this.errorBag.add(
                         name,
+                        rule,
                         this._formatErrorMessage(name, rule, values.data),
                         scope
                     );
@@ -1241,14 +1243,14 @@ class Validator
 
         if (isObject(result)) {
             if (! result.valid) {
-                this.errorBag.add(name, this._formatErrorMessage(name, rule, result.data), scope);
+                this.errorBag.add(name, this._formatErrorMessage(name, rule, result.data), scope, rule);
             }
 
             return result.valid;
         }
 
         if (! result) {
-            this.errorBag.add(name, this._formatErrorMessage(name, rule), scope);
+            this.errorBag.add(name, this._formatErrorMessage(name, rule), scope, rule);
         }
 
         return result;

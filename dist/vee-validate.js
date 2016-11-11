@@ -606,10 +606,11 @@ var ErrorBag = function () {
 
     createClass(ErrorBag, [{
         key: "add",
-        value: function add(field, msg, scope) {
+        value: function add(field, msg, scope, rule) {
             var error = {
                 field: field,
-                msg: msg
+                msg: msg,
+                rule: rule
             };
 
             if (scope) {
@@ -1822,12 +1823,12 @@ var Validator = function () {
                             return t.valid;
                         });
                         if (!allValid) {
-                            _this5.errorBag.add(name, _this5._formatErrorMessage(name, rule), scope);
+                            _this5.errorBag.add(name, _this5._formatErrorMessage(name, rule), scope, rule);
                         }
                     } else {
                         // Is a single object.
                         allValid = values.valid;
-                        _this5.errorBag.add(name, _this5._formatErrorMessage(name, rule, values.data), scope);
+                        _this5.errorBag.add(name, rule, _this5._formatErrorMessage(name, rule, values.data), scope);
                     }
 
                     return allValid;
@@ -1836,14 +1837,14 @@ var Validator = function () {
 
             if (isObject(result)) {
                 if (!result.valid) {
-                    this.errorBag.add(name, this._formatErrorMessage(name, rule, result.data), scope);
+                    this.errorBag.add(name, this._formatErrorMessage(name, rule, result.data), scope, rule);
                 }
 
                 return result.valid;
             }
 
             if (!result) {
-                this.errorBag.add(name, this._formatErrorMessage(name, rule), scope);
+                this.errorBag.add(name, this._formatErrorMessage(name, rule), scope, rule);
             }
 
             return result;
